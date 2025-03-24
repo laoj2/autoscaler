@@ -1,21 +1,29 @@
 # AEP-4016: Support for in place updates in VPA
 
 <!-- toc -->
-- [Summary](#summary)
+- [AEP-4016: Support for in place updates in VPA](#aep-4016-support-for-in-place-updates-in-vpa)
+  - [Summary](#summary)
     - [A Note On Disruptions](#a-note-on-disruptions)
     - [Goals](#goals)
     - [Non-Goals](#non-goals)
-- [Proposal](#proposal)
-- [Context](#context)
-- [Design Details](#design-details)
+  - [Proposal](#proposal)
+  - [Context](#context)
+  - [Design Details](#design-details)
     - [Applying Updates During Pod Admission](#applying-updates-during-pod-admission)
     - [In-Place Updates](#in-place-updates)
+      - [A note on `ResizePolicy`.](#a-note-on-resizepolicy)
+      - [Partial Updates](#partial-updates)
     - [Comparison of `UpdateMode`s](#comparison-of-updatemodes)
     - [Test Plan](#test-plan)
     - [Upgrade / Downgrade Strategy](#upgrade--downgrade-strategy)
+      - [Upgrade](#upgrade)
+      - [Downgrade](#downgrade)
     - [Feature Enablement and Rollback](#feature-enablement-and-rollback)
+      - [How can this feature be enabled / disabled in a live cluster?](#how-can-this-feature-be-enabled--disabled-in-a-live-cluster)
     - [Kubernetes version compatibility](#kubernetes-version-compatibility)
-- [Implementation History](#implementation-history)
+    - [Details still to consider](#details-still-to-consider)
+      - [Careful with memory scale down](#careful-with-memory-scale-down)
+  - [Implementation History](#implementation-history)
 <!-- /toc -->
 
 ## Summary
@@ -168,9 +176,10 @@ be prevented anyway.
 
 VPA updater will consider that the update failed if:
 * The pod has condition `PodResizePending` with reason `Infeasible` or
-* The pod has condition `PodResizePending` with reason `Deferred` and more than 5 minutes elapsed
-  since the update or
-* The pod has condition `PodResizing` and more than 1 hour elapsed since the update or
+* The pod has condition `PodResizePending` with reason `Deferred` and more than
+  `--in-place-deferred-resize-timeout` elapsed since the update or
+* The pod has condition `PodResizing` and more than `--in-place-resize-timeout`
+  elapsed since the update or
 * Patch attempt returns an error.
 
 Note that in the initial version of In-Place updates, memory limit downscaling will always fail
@@ -228,7 +237,7 @@ Today, VPA updater considers the following conditions when deciding if it should
    * Outside recommended range,
    * Long-lived pod with significant change.
    * `EvictionRequirements` are all true.
- 
+
 `InPlaceOrRecreate` will attempt to apply an update in place if it meets at least one
 of the following conditions:
 * Quick OOM,
@@ -251,7 +260,7 @@ of the following conditions:
 The following test scenarios will be added to e2e tests. The `InPlaceOrRecreate` mode will be
 tested in the following scenarios:
 
-* Admission controller applies recommendation to pod controlled by VPA. 
+* Admission controller applies recommendation to pod controlled by VPA.
 * In-place update applied to all containers of a pod.
 * In-place update will fail. Pod should be evicted and the recommendation applied.
 * In-place update will fail but `CanEvict` is false, pod should not be evicted.
